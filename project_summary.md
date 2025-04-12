@@ -9,6 +9,7 @@ This project aims to detect potential spammers on the Fiverr platform using mach
 - **Target Variable**: Binary classification (1 = spammer, 0 = non-spammer)
 - **Identifier**: user_id for each entry
 - **Privacy**: Feature names are anonymized for privacy concerns
+- **Class Distribution**: 2.69% spammer, 97.31% non-spammer
 
 ## Data Analysis
 
@@ -16,16 +17,21 @@ This project aims to detect potential spammers on the Fiverr platform using mach
 The EDA process includes:
 
 #### Basic Statistics
-- Dataset shape and dimensions
+- Dataset shape: 458,798 samples × 51 features
 - Summary statistics for all features
 - Class distribution analysis
-- Missing values assessment
+- Missing values: 6 total missing values
 
 #### Feature Analysis
 - Correlation analysis between features
 - Identification of highly correlated feature pairs (>0.8)
 - Statistical significance testing (t-tests)
-- Feature importance ranking
+- Feature importance ranking:
+  - X19: 0.2261
+  - X1: 0.0761
+  - X2: 0.0680
+  - X22: 0.0620
+  - X21: 0.0592
 
 #### Visualization Outputs
 - Class distribution plots
@@ -89,19 +95,19 @@ For each model, we calculate and compare:
 ### Output Files Generated
 
 #### 1. Analysis Outputs
-- `eda_plots/class_distribution.png`
-- `eda_plots/correlation_matrix.png`
-- `eda_plots/missing_values.png`
+- `../plots/eda_plots/class_distribution.png`
+- `../plots/eda_plots/correlation_matrix.png`
+- `../plots/eda_plots/missing_values.png`
 - Feature distribution plots for significant features
 
 #### 2. Model Evaluation Outputs
 - `model_comparison_results.csv`
-- `comparison_train_accuracy.png`
-- `comparison_train_precision.png`
-- `comparison_train_recall.png`
-- `comparison_train_f1.png`
-- `best_model_train_confusion_matrix.png`
-- `best_model_test_confusion_matrix.png`
+- `../plots/eda_plots/comparison_train_accuracy.png`
+- `../plots/eda_plots/comparison_train_precision.png`
+- `../plots/eda_plots/comparison_train_recall.png`
+- `../plots/eda_plots/comparison_train_f1.png`
+- `../plots/eda_plots/best_model_train_confusion_matrix.png`
+- `../plots/eda_plots/best_model_test_confusion_matrix.png`
 
 #### 3. Predictions
 - `spammer_predictions.csv`: Final predictions file with user_id and prediction columns
@@ -186,13 +192,16 @@ During the evaluation of various models, we observed signs of overfitting in som
 3. **Cross-Validation**: Use k-fold cross-validation to ensure model robustness and generalization.
 4. **Feature Selection**: Remove irrelevant or redundant features to simplify the model.
 
-These strategies can help improve the generalization of models and reduce the risk of overfitting, leading to better performance on unseen data.
-
 ## Project Structure
 ```
 ├── spammer_prediction.py    # Main implementation file
 ├── requirements.txt         # Project dependencies
-├── eda_plots/              # EDA visualization outputs
+├── plots/                  # Visualization outputs
+│   └── eda_plots/         # EDA visualization outputs
+│       ├── class_distribution.png
+│       ├── correlation_matrix.png
+│       ├── missing_values.png
+│       └── ...
 ├── model_comparison_results.csv  # Model evaluation results
 └── spammer_predictions.csv      # Final predictions
 ``` 
