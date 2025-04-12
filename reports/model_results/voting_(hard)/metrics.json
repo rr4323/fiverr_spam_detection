@@ -1,0 +1,8 @@
+{
+    "Model": "Voting (Hard)",
+    "Accuracy": 0.9634808195292066,
+    "Precision": 0.4044386985563456,
+    "Recall": 0.7617694805194806,
+    "F1 Score": 0.5283603096410978,
+    "ROC-AUC": null
+}
