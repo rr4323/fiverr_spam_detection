@@ -167,67 +167,94 @@ Using LLM with spammer behavior expertise, we analyzed the top important feature
 *Note: This feature mapping was generated using Gemini and ChatGPT's analysis of spammer behavior patterns and hypothetical field mappings. The actual field names and meanings may differ from the encoded features in the dataset.*
 
 #### 6.2.1 Actual Dataset Field Mapping
-- **Top Important Features** (Actual Encoded Names):
-  1. X19 (0.2261) → AccountAge_Seconds
-  2. X1 (0.0761) → MessagesSent_Total
-  3. X2 (0.0680) → MessagesSent_Last30Days
-  4. X22 (0.0620) → AccountVerification_Level
-  5. X21 (0.0592) → ProfileCompleteness_Score
+- **Dataset Structure**:
+  - Column 1: user_id (unique identifier for each user)
+  - Column 2: label (1 for spammer, 0 for non-spammer)
+  - Columns X1 through X51: Feature columns
 
-- **Numeric Features**:
-  - X19 → AccountAge_Seconds
-  - X1 → MessagesSent_Total
-  - X2 → MessagesSent_Last30Days
-  - X3 → LoginCount_Recent
-  - X4 → SkillsListed_Count
-  - X5 → PortfolioItems_Count
-  - X6 → GigsActive_Count
-  - X7 → ReviewsReceived_Count
-  - X8 → OrdersCompleted_Count
+- **Top Important Features** (Based on Model Analysis):
+  1. X19 (0.1773) → AvgRating_Encoded
+  2. X22 (0.0835) → MentionsOffPlatformApp
+  3. X7 (0.0649) → VerificationLevel_Encoded
+  4. X6 (0.0611) → ProfileCompletionTier_Encoded
+  5. X8 (0.0555) → LoginCount_Recent
+  6. X5 (0.0456) → CountryTier_Encoded
+  7. X4 (0.0450) → ReferrerType_Encoded
+  8. X17 (0.0375) → ReviewsReceived_Count
+  9. X2 (0.0364) → MessagesSent_Total
+  10. X36 (0.0350) → AsksForCredentials_OffPlatform
+  11. X25 (0.0334) → UsernameHasExcessiveSpecialChars
+  12. X23 (0.0309) → FlaggedByOtherUser
+  13. X21 (0.0288) → SentLink_InMsg
+  14. X18 (0.0231) → OrdersCompleted_Count
+  15. X9 (0.0223) → Country_Encoded
+  16. X1 (0.0215) → AccountAge_Seconds
+  17. X49 (0.0210) → SuspectedRobotUser
+  18. X16 (0.0207) → GigsActive_Count
+  19. X39 (0.0206) → VeryShortInitialMessage
+  20. X3 (0.0192) → AccountLevel_Encoded
 
-- **Categorical Features**:
-  - X9 → AccountLevel_Encoded
-  - X10 → ReferrerType_Encoded
-  - X11 → CountryTier_Encoded
-  - X12 → VerificationLevel_Encoded
-  - X13 → ProfileCompletionTier_Encoded
-  - X14 → AvgRating_Encoded
+- **Features with Zero Importance**:
+  - X33 → UsedUrgentLanguage_InMsg
+  - X30 → SentShortenedLink_InMsg
+  - X46 → IndiscriminateApplicationsSent
+  - X47 → IsKnownBotOrHeuristic
+  - X48 → HeadlessBrowser
+  - X29 → AsksForPayment_OffPlatform
+  - X27 → PaymentVerified_Flag
 
-- **Boolean Features**:
-  - X15 → HasProfilePic
-  - X16 → HasDescription
-  - X17 → EmailVerified
-  - X18 → PhoneVerified
+- **Complete Feature Mapping** (in order from dataset):
+  - X1 → AccountAge_Seconds
+  - X2 → MessagesSent_Total
+  - X3 → AccountLevel_Encoded
+  - X4 → ReferrerType_Encoded
+  - X5 → CountryTier_Encoded
+  - X6 → ProfileCompletionTier_Encoded
+  - X7 → VerificationLevel_Encoded
+  - X8 → LoginCount_Recent
+  - X9 → Country_Encoded
+  - X10 → HasProfilePic
+  - X11 → HasDescription
+  - X12 → EmailVerified
+  - X13 → PhoneVerified
+  - X14 → SkillsListed_Count
+  - X15 → PortfolioItems_Count
+  - X16 → GigsActive_Count
+  - X17 → ReviewsReceived_Count
+  - X18 → OrdersCompleted_Count
+  - X19 → AvgRating_Encoded
   - X20 → LoginFromSuspiciousIP
-  - X23 → SentLink_InMsg
-  - X24 → MentionsOffPlatformApp
-  - X25 → AsksForEmail_InMsg
-  - X26 → AsksForPayment_OffPlatform
-  - X27 → SentShortenedLink_InMsg
-  - X28 → AsksToOpenLink_Urgent
-  - X29 → MentionsAttachment_InMsg
-  - X30 → UsedUrgentLanguage_InMsg
-  - X31 → UsernameHasNumbers
-  - X32 → UsernameHasExcessiveSpecialChars
-  - X33 → UsedDisposableEmail
-  - X34 → UsedTemporaryOnlinePhoneNumber
-  - X35 → VeryShortInitialMessage
-  - X36 → UsedGenericSpamTemplate
-  - X37 → ImpersonationAttempt_InMsg
-  - X38 → AsksForFinancialDetails_OffPlatform
-  - X39 → AsksForCredentials_OffPlatform
-  - X40 → MentionsOffPlatformPaymentMethod
+  - X21 → SentLink_InMsg
+  - X22 → MentionsOffPlatformApp
+  - X23 → FlaggedByOtherUser
+  - X24 → UsernameHasNumbers
+  - X25 → UsernameHasExcessiveSpecialChars
+  - X26 → UsedDisposableEmail
+  - X27 → PaymentVerified_Flag
+  - X28 → AsksForEmail_InMsg
+  - X29 → AsksForPayment_OffPlatform
+  - X30 → SentShortenedLink_InMsg
+  - X31 → AsksToOpenLink_Urgent
+  - X32 → MentionsAttachment_InMsg
+  - X33 → UsedUrgentLanguage_InMsg
+  - X34 → ImpersonationAttempt_InMsg
+  - X35 → AsksForFinancialDetails_OffPlatform
+  - X36 → AsksForCredentials_OffPlatform
+  - X37 → MentionsOffPlatformPaymentMethod
+  - X38 → UsedTemporaryOnlinePhoneNumber
+  - X39 → VeryShortInitialMessage
+  - X40 → UsedGenericSpamTemplate
   - X41 → AsksForPersonalInfo
   - X42 → ContactedUnsolicited
   - X43 → RapidMessagingDetected
   - X44 → AttemptedSuspiciousAction
   - X45 → VagueJobDescriptionPosted
   - X46 → IndiscriminateApplicationsSent
-  - X47 → IsKnownBotOrHeadlessBrowser
-  - X48 → SuspectedRobotUser
-  - X49 → CaptchaDefeatedByBot
-  - X50 → OtherBehaviorFlag_5
-  - X51 → OtherBehaviorFlag_6
+  - X47 → IsKnownBotOrHeuristic
+  - X48 → HeadlessBrowser
+  - X49 → SuspectedRobotUser
+  - X50 → CaptchaDefeatedByBot
+  - X51 → OtherBehaviorFlag_5
 
 #### 6.2.2 Numeric Features (Hypothetical Mapping)
 - **Account Metrics**:
