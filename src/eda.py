@@ -50,14 +50,27 @@ class SpammerEDA:
 
     def correlation_analysis(self):
         """Analyze and visualize feature correlations"""
-        correlation_matrix = self.df[self.feature_cols].corr()
+        # Include label in correlation analysis
+        correlation_matrix = self.df[self.feature_cols + ['label']].corr()
         
         # Plot correlation heatmap
         plt.figure(figsize=(20, 16))
         sns.heatmap(correlation_matrix, cmap='coolwarm', center=0, annot=False)
-        plt.title('Feature Correlation Matrix')
+        plt.title('Feature Correlation Matrix (Including Label)')
         plt.tight_layout()
         plt.savefig(f'{self.output_dir}/correlation_matrix.png')
+        plt.close()
+        
+        # Plot label correlations separately
+        label_correlations = correlation_matrix['label'].drop('label')
+        plt.figure(figsize=(12, 8))
+        label_correlations.sort_values().plot(kind='bar')
+        plt.title('Feature Correlations with Label')
+        plt.xlabel('Features')
+        plt.ylabel('Correlation with Label')
+        plt.xticks(rotation=90)
+        plt.tight_layout()
+        plt.savefig(f'{self.output_dir}/label_correlations.png')
         plt.close()
         
         # Find highly correlated features
@@ -71,7 +84,14 @@ class SpammerEDA:
                         'correlation': correlation_matrix.iloc[i, j]
                     })
         
-        return high_corr_features
+        # Get top features correlated with label
+        top_label_correlations = label_correlations.abs().sort_values(ascending=False).head(10)
+        
+        return {
+            'high_correlation_pairs': high_corr_features,
+            'label_correlations': label_correlations.to_dict(),
+            'top_label_correlations': top_label_correlations.to_dict()
+        }
 
     def feature_importance_analysis(self):
         """Analyze feature importance using Random Forest"""
@@ -186,7 +206,7 @@ class SpammerEDA:
                 'spammer': class_dist[1],
                 'non_spammer': class_dist[0]
             },
-            'high_correlation_pairs': len(high_corr_features),
+            'high_correlation_pairs': len(high_corr_features['high_correlation_pairs']),
             'top_important_features': dict(list(feature_importance.items())[:5]),
             'pca_explained_variance': pca_results['explained_variance_ratio'].tolist(),
             'missing_values': self.df.isnull().sum().sum()
@@ -222,9 +242,9 @@ The following features were identified as most important for spammer detection:
             report += f"- **{feature}**: {importance:.4f}\n"
         
         report += "\n#### 2.2 Highly Correlated Feature Pairs\n"
-        if high_corr_features:
+        if high_corr_features['high_correlation_pairs']:
             report += "The following feature pairs show high correlation (>0.8):\n\n"
-            for pair in high_corr_features:
+            for pair in high_corr_features['high_correlation_pairs']:
                 report += f"- {pair['feature1']} ↔ {pair['feature2']}: {pair['correlation']:.3f}\n"
         else:
             report += "No feature pairs with correlation > 0.8 were found.\n"
@@ -279,7 +299,7 @@ The following plots show individual feature distributions:
    
 3. **Data Quality**:
    - {summary['missing_values']} missing values identified
-   - {len(high_corr_features)} highly correlated feature pairs found
+   - {len(high_corr_features['high_correlation_pairs'])} highly correlated feature pairs found
 
 ### 6. Recommendations
 

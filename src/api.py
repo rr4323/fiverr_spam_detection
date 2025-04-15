@@ -128,21 +128,37 @@ def identify_risk_factors(features: Dict[str, float], feature_mapping: Dict[str,
         # Check numeric features against thresholds
         elif feature_info['type'] == 'numeric':
             # Add specific thresholds for numeric features
-            if feature_name == 'X1' and value < 86400:  # Account age less than 24 hours
+            if feature_name == 'X19' and value > 5:  # High urgent message count
                 risk_factors.append({
                     'feature': feature_name,
                     'description': description,
                     'category': category,
                     'value': str(value),
-                    'reason': 'Very new account (less than 24 hours old)'
+                    'reason': 'High number of urgent messages'
                 })
-            elif feature_name == 'X8' and value > 50:  # High number of recent logins
+            elif feature_name == 'X8' and value > 10:  # High number of verified reviews
                 risk_factors.append({
                     'feature': feature_name,
                     'description': description,
                     'category': category,
                     'value': str(value),
-                    'reason': 'Unusually high number of recent logins'
+                    'reason': 'Unusually high number of verified reviews'
+                })
+            elif feature_name == 'X16' and value > 15:  # High daily message count
+                risk_factors.append({
+                    'feature': feature_name,
+                    'description': description,
+                    'category': category,
+                    'value': str(value),
+                    'reason': 'Excessive daily messaging activity'
+                })
+            elif feature_name == 'X18' and value > 8:  # High incomplete orders
+                risk_factors.append({
+                    'feature': feature_name,
+                    'description': description,
+                    'category': category,
+                    'value': str(value),
+                    'reason': 'High number of incomplete orders'
                 })
     
     return risk_factors
@@ -151,6 +167,7 @@ def identify_risk_factors(features: Dict[str, float], feature_mapping: Dict[str,
 async def predict(request: PredictionRequest):
     """Make a prediction for a single user"""
     try:
+        print(request.features)
         # Validate features
         print(feature_mapping.keys())
         print(request.features.keys())

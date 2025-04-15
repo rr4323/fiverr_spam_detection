@@ -32,78 +32,56 @@ Features with missing values:
 - **X13**: 6.0 values (0.00%)
 
 ### 4. Visualization Summary
-The following visualizations have been generated:
+The following visualizations have been generated in the plots directory:
 
 #### 4.1 Overall Analysis
-1. **Class Distribution**
-   ![Class Distribution](../plots/eda_plots/class_distribution.png)
+1. **Class Distribution** (`../plots/eda_plots/class_distribution.png`)
    - Shows the balance between spammer and non-spammer classes
-
-2. **PCA Scatter Plot**
-   ![PCA Scatter Plot](../plots/eda_plots/pca_scatter.png)
+2. **PCA Scatter Plot** (`../plots/eda_plots/pca_scatter.png`)
    - 2D projection of the data using principal components
-
-3. **Pair Plot**
-   ![Pair Plot](../plots/eda_plots/pairplot_top_features.png)
+3. **Pair Plot** (`../plots/eda_plots/pairplot_top_features.png`)
    - Scatter plots showing relationships between top features
-
-4. **Feature Importance Plot**
-   ![Feature Importance](../plots/eda_plots/feature_importances.png)
+4. **Feature Importance Plot** (`../plots/eda_plots/feature_importances.png`)
    - Bar plot showing the importance of each feature
-
-5. **Missing Values Analysis**
-   ![Missing Values](../plots/eda_plots/missing_values.png)
+5. **Missing Values Analysis** (`../plots/eda_plots/missing_values.png`)
    - Visualization of missing values across features
 
 #### 4.2 Feature Correlations
-1. **Feature Correlation Matrix**
-   ![Correlation Matrix](../plots/eda_plots/correlation_matrix.png)
+1. **Feature Correlation Matrix** (`../plots/eda_plots/correlation_matrix.png`)
    - Heatmap showing correlations between features
-
-2. **Detailed Correlation Matrix**
-   ![Detailed Correlation](../plots/eda_plots/feature_correlation_matrix.png)
+2. **Detailed Correlation Matrix** (`../plots/eda_plots/feature_correlation_matrix.png`)
    - More detailed view of feature correlations
 
 #### 4.3 Feature Distributions
 The following plots show individual feature distributions:
-
-1. **X1 Distribution**
-   ![X1 Distribution](../plots/eda_plots/X1_distribution.png)
-   - Box plot showing distribution by class
-
-2. **X2 Distribution**
-   ![X2 Distribution](../plots/eda_plots/X2_distribution.png)
-   - Box plot showing distribution by class
-
-3. **X19 Distribution**
-   ![X19 Distribution](../plots/eda_plots/X19_distribution.png)
-   - Box plot showing distribution by class
-
-4. **X21 Distribution**
-   ![X21 Distribution](../plots/eda_plots/X21_distribution.png)
-   - Box plot showing distribution by class
-
-5. **X22 Distribution**
-   ![X22 Distribution](../plots/eda_plots/X22_distribution.png)
-   - Box plot showing distribution by class
+- **X1** (`../plots/eda_plots/X1_distribution.png`)
+  - Box plot showing distribution by class
+- **X2** (`../plots/eda_plots/X2_distribution.png`)
+  - Box plot showing distribution by class
+- **X19** (`../plots/eda_plots/X19_distribution.png`)
+  - Box plot showing distribution by class
+- **X21** (`../plots/eda_plots/X21_distribution.png`)
+  - Box plot showing distribution by class
+- **X22** (`../plots/eda_plots/X22_distribution.png`)
+  - Box plot showing distribution by class
 
 ### 5. Key Findings
 
 1. **Class Imbalance**:
-   - The dataset shows a 2.69% / 97.31% split between spammers and non-spammers
+   - The dataset shows a {summary['class_distribution']['spammer']:.1%} / {summary['class_distribution']['non_spammer']:.1%} split between spammers and non-spammers
    
 2. **Feature Importance**:
    - The top features account for significant predictive power
    - Behavioral features show strong discrimination between classes
    
 3. **Data Quality**:
-   - 6 missing values identified
-   - 4 highly correlated feature pairs found
+   - {summary['missing_values']} missing values identified
+   - {len(high_corr_features['high_correlation_pairs'])} highly correlated feature pairs found
 
 ### 6. Recommendations
 
 1. **Feature Selection**:
-   - Consider using the top 5 most important features
+   - Consider using the top {len(summary['top_important_features'])} most important features
    - Evaluate removing one feature from highly correlated pairs
    
 2. **Data Preprocessing**:
@@ -123,3 +101,4 @@ The following plots show individual feature distributions:
 4. Regular monitoring of feature importance in production
 
 ---
+*Report generated on: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}*

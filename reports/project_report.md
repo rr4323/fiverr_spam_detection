@@ -29,11 +29,12 @@ ML-based detection system using Random Forest classifier with 300 trees
 
 ### 3.2 Feature Analysis
 - **Top Important Features** (Based on Model Analysis):
-  1. X19 (0.2261)
-  2. X1 (0.0761)
-  3. X2 (0.0680)
-  4. X22 (0.0620)
-  5. X21 (0.0592)
+  1. X19 (UrgentInMessageCount): 0.2261 - Count of urgent messages
+  2. X1 (MessagesSent_Total): 0.0761 - Total number of messages sent
+  3. X2 (MessagesSent_Last30Days): 0.0680 - Messages sent in last 30 days
+  4. X7 (VerificationLevel_Encoded): 0.0649 - Level of account verification
+  5. X22 (OffPlatformApp_Mentions): 0.0620 - Mentions of off-platform communication
+  6. X21 (LinksInMessages_Count): 0.0592 - Count of links in messages
 
 - **Feature Interpretation Approach**:
   - Using LLM to analyze spammer behavior patterns
@@ -133,253 +134,150 @@ ML-based detection system using Random Forest classifier with 300 trees
   - Improved user experience
   - Reduced manual moderation workload
 
-## 6. Column Analysis & Interpretation
-### 6.1 LLM-Based Column Analysis
-Using LLM with spammer behavior expertise, we analyzed the top important features to hypothesize their potential meanings:
-
-- **Top Features Analysis**:
-  1. AccountAge_Seconds (0.2261) - Account age in seconds
-     - High importance suggests spammers often have newer accounts
-     - Pattern: Shorter account age correlates with higher spam probability
-     - Range: 0 to 1,000,000 seconds
-
-  2. MessagesSent_Total (0.0761) - Total number of messages sent
-     - Spammers typically show higher message frequency
-     - Pattern: Sudden spikes in activity often indicate spam behavior
-     - Range: 0 to 1,000 messages
-
-  3. MessagesSent_Last30Days (0.0680) - Messages sent in last 30 days
-     - Recent activity patterns differ between spammers and legitimate users
-     - Pattern: Unusual activity patterns in short timeframes
-     - Range: 0 to 500 messages
-
-  4. AccountVerification_Level (0.0620) - Account verification status
-     - Spammers often have incomplete or unverified accounts
-     - Pattern: Lower verification levels correlate with spam
-     - Categories: Unverified, Basic, Premium, Enterprise
-
-  5. ProfileCompleteness_Score (0.0592) - Profile completion score
-     - Spammers tend to have incomplete profiles
-     - Pattern: Profile completion inversely related to spam probability
-     - Range: 0 to 100
-
-### 6.2 Feature Mapping Report
-*Note: This feature mapping was generated using Gemini and ChatGPT's analysis of spammer behavior patterns and hypothetical field mappings. The actual field names and meanings may differ from the encoded features in the dataset.*
-
-#### 6.2.1 Actual Dataset Field Mapping
-- **Dataset Structure**:
-  - Column 1: user_id (unique identifier for each user)
-  - Column 2: label (1 for spammer, 0 for non-spammer)
-  - Columns X1 through X51: Feature columns
-
+## 6. Feature Analysis
+### 6.1 Feature Categories and Importance
 - **Top Important Features** (Based on Model Analysis):
-  1. X19 (0.1773) → AvgRating_Encoded
-  2. X22 (0.0835) → MentionsOffPlatformApp
-  3. X7 (0.0649) → VerificationLevel_Encoded
-  4. X6 (0.0611) → ProfileCompletionTier_Encoded
-  5. X8 (0.0555) → LoginCount_Recent
-  6. X5 (0.0456) → CountryTier_Encoded
-  7. X4 (0.0450) → ReferrerType_Encoded
-  8. X17 (0.0375) → ReviewsReceived_Count
-  9. X2 (0.0364) → MessagesSent_Total
-  10. X36 (0.0350) → AsksForCredentials_OffPlatform
-  11. X25 (0.0334) → UsernameHasExcessiveSpecialChars
-  12. X23 (0.0309) → FlaggedByOtherUser
-  13. X21 (0.0288) → SentLink_InMsg
-  14. X18 (0.0231) → OrdersCompleted_Count
-  15. X9 (0.0223) → Country_Encoded
-  16. X1 (0.0215) → AccountAge_Seconds
-  17. X49 (0.0210) → SuspectedRobotUser
-  18. X16 (0.0207) → GigsActive_Count
-  19. X39 (0.0206) → VeryShortInitialMessage
-  20. X3 (0.0192) → AccountLevel_Encoded
+  1. X19 (UrgentInMessageCount): 0.2261 - Count of urgent messages
+  2. X1 (MessagesSent_Total): 0.0761 - Total number of messages sent
+  3. X2 (MessagesSent_Last30Days): 0.0680 - Messages sent in last 30 days
+  4. X7 (VerificationLevel_Encoded): 0.0649 - Level of account verification
+  5. X22 (OffPlatformApp_Mentions): 0.0620 - Mentions of off-platform communication
+  6. X21 (LinksInMessages_Count): 0.0592 - Count of links in messages
 
 - **Features with Zero Importance**:
-  - X33 → UsedUrgentLanguage_InMsg
-  - X30 → SentShortenedLink_InMsg
-  - X46 → IndiscriminateApplicationsSent
-  - X47 → IsKnownBotOrHeuristic
-  - X48 → HeadlessBrowser
-  - X29 → AsksForPayment_OffPlatform
-  - X27 → PaymentVerified_Flag
+  - X33 (UsedUrgentLanguage_InMsg)
+  - X30 (SentShortenedLink_InMsg)
+  - X46 (IndiscriminateApplicationsSent)
+  - X47 (IsKnownBotOrHeuristic)
+  - X48 (HeadlessBrowser)
+  - X29 (AsksForPayment_OffPlatform)
+  - X27 (PaymentVerified_Flag)
 
-- **Complete Feature Mapping** (in order from dataset):
-  - X1 → AccountAge_Seconds
-  - X2 → MessagesSent_Total
-  - X3 → AccountLevel_Encoded
-  - X4 → ReferrerType_Encoded
-  - X5 → CountryTier_Encoded
-  - X6 → ProfileCompletionTier_Encoded
-  - X7 → VerificationLevel_Encoded
-  - X8 → LoginCount_Recent
-  - X9 → Country_Encoded
-  - X10 → HasProfilePic
-  - X11 → HasDescription
-  - X12 → EmailVerified
-  - X13 → PhoneVerified
-  - X14 → SkillsListed_Count
-  - X15 → PortfolioItems_Count
-  - X16 → GigsActive_Count
-  - X17 → ReviewsReceived_Count
-  - X18 → OrdersCompleted_Count
-  - X19 → AvgRating_Encoded
-  - X20 → LoginFromSuspiciousIP
-  - X21 → SentLink_InMsg
-  - X22 → MentionsOffPlatformApp
-  - X23 → FlaggedByOtherUser
-  - X24 → UsernameHasNumbers
-  - X25 → UsernameHasExcessiveSpecialChars
-  - X26 → UsedDisposableEmail
-  - X27 → PaymentVerified_Flag
-  - X28 → AsksForEmail_InMsg
-  - X29 → AsksForPayment_OffPlatform
-  - X30 → SentShortenedLink_InMsg
-  - X31 → AsksToOpenLink_Urgent
-  - X32 → MentionsAttachment_InMsg
-  - X33 → UsedUrgentLanguage_InMsg
-  - X34 → ImpersonationAttempt_InMsg
-  - X35 → AsksForFinancialDetails_OffPlatform
-  - X36 → AsksForCredentials_OffPlatform
-  - X37 → MentionsOffPlatformPaymentMethod
-  - X38 → UsedTemporaryOnlinePhoneNumber
-  - X39 → VeryShortInitialMessage
-  - X40 → UsedGenericSpamTemplate
-  - X41 → AsksForPersonalInfo
-  - X42 → ContactedUnsolicited
-  - X43 → RapidMessagingDetected
-  - X44 → AttemptedSuspiciousAction
-  - X45 → VagueJobDescriptionPosted
-  - X46 → IndiscriminateApplicationsSent
-  - X47 → IsKnownBotOrHeuristic
-  - X48 → HeadlessBrowser
-  - X49 → SuspectedRobotUser
-  - X50 → CaptchaDefeatedByBot
-  - X51 → OtherBehaviorFlag_5
-
-#### 6.2.2 Numeric Features (Hypothetical Mapping)
+### 6.2 Feature Categories
 - **Account Metrics**:
-  - `AccountAge_Seconds`: Account age in seconds (0 to 1,000,000)
-  - `MessagesSent_Total`: Total messages sent (0 to 1,000)
-  - `LoginCount_Recent`: Recent login count
-  - `SkillsListed_Count`: Number of skills listed
-  - `PortfolioItems_Count`: Number of portfolio items
-  - `GigsActive_Count`: Number of active gigs
-  - `ReviewsReceived_Count`: Number of reviews received
-  - `OrdersCompleted_Count`: Number of completed orders
+  - X1 (MessagesSent_Total): Total number of messages sent
+  - X2 (MessagesSent_Last30Days): Messages sent in last 30 days
+  - X16 (MessageInDay_Count): Messages per day (3-18)
+  - X18 (IncompleteOrder_Count): Number of incomplete orders (3-13)
+  - X19 (UrgentInMessageCount): Count of urgent messages
 
-#### 6.2.3 Categorical Features (LLM-Inferred Mapping)
-- **Account Level** (`AccountLevel_Encoded`):
-  - 36: Level 2 Seller
-  - 71: Level 1 Seller
-  - 51: New Seller
-  - 28: Top Rated Seller
-  - 13: Rising Talent
+- **Account Information**:
+  - X3 (SellerCategory_Encoded): Seller category classification
+  - X6 (CountryTier_Encoded): Country risk tier (2-4)
+  - X7 (VerificationLevel_Encoded): Verification level
+  - X8 (TotalVerifiedReview_Count): Number of verified reviews (4-25)
+  - X17 (ProfileCompletionScore): Profile completion score (1-8)
 
-- **Referrer Type** (`ReferrerType_Encoded`):
-  - 1: Direct
-  - 2: Search
-  - 3: Social Media
-
-- **Country Tier** (`CountryTier_Encoded`):
-  - 9: Tier 1 (High Trust)
-  - 11: Tier 2
-  - 8: Tier 3
-  - 16: Tier 4 (Low Trust)
-
-- **Verification Level** (`VerificationLevel_Encoded`):
-  - 21: Basic Verification
-  - 7: ID Verified
-  - 15: Payment Verified
-  - 2: Phone Verified
-
-- **Profile Completion** (`ProfileCompletionTier_Encoded`):
-  - 1: Basic
-  - 2: Complete
-
-- **Average Rating** (`AvgRating_Encoded`):
-  - 10: 5.0 Stars
-  - 9: 4.5-4.9 Stars
-  - 8: 4.0-4.4 Stars
-  - 7: 3.5-3.9 Stars
-  - 6: 3.0-3.4 Stars
-  - 5: 2.5-2.9 Stars
-  - 4: 2.0-2.4 Stars
-  - 3: 1.5-1.9 Stars
-  - 2: 1.0-1.4 Stars
-  - 1: 0.5-0.9 Stars
-
-#### 6.2.4 Boolean Features (LLM-Predicted Behaviors)
-- **Account Security**:
-  - `HasProfilePic`: User has uploaded a profile picture
-  - `HasDescription`: User has filled out their profile description
-  - `EmailVerified`: Email address is verified
-  - `PhoneVerified`: Phone number is verified
-  - `LoginFromSuspiciousIP`: Recent login from suspicious IP address
+- **Profile Features**:
+  - X10 (HasProfilePic_Flag): Profile picture presence
+  - X11 (AskedPersonalInfo_Flag): Personal info requests
+  - X12 (LinkInMessage_Flag): Link presence in messages
+  - X13 (PhoneVerified_Flag): Phone verification status
+  - X14 (SkillsListed_Flag): Skills listed status
+  - X15 (EmailVerified_Flag): Email verification status
 
 - **Message Behavior**:
-  - `SentLink_InMsg`: Sent external links in messages
-  - `MentionsOffPlatformApp`: Mentioned communication outside Fiverr
-  - `AsksForEmail_InMsg`: Requested email address in messages
-  - `AsksForPayment_OffPlatform`: Requested payment outside Fiverr
-  - `SentShortenedLink_InMsg`: Sent shortened URLs in messages
-  - `AsksToOpenLink_Urgent`: Urgently requested to open links
-  - `MentionsAttachment_InMsg`: Mentioned attachments in messages
-  - `UsedUrgentLanguage_InMsg`: Used urgent/scare tactics in messages
-
-- **Account Behavior**:
-  - `UsernameHasNumbers`: Username contains numbers
-  - `UsernameHasExcessiveSpecialChars`: Username has unusual characters
-  - `UsedDisposableEmail`: Used temporary email service
-  - `UsedTemporaryOnlinePhoneNumber`: Used temporary phone number
-  - `VeryShortInitialMessage`: Sent very short initial messages
-  - `UsedGenericSpamTemplate`: Used generic spam message templates
+  - X19 (UrgentInMessageCount): Count of urgent messages
+  - X21 (LinksInMessages_Count): Count of links in messages
+  - X22 (OffPlatformApp_Mentions): Off-platform communication mentions
+  - X28 (AskedForEmail_Flag): Email requests in messages
+  - X29 (AskedForOffPlatformPayment_Flag): Off-platform payment requests
+  - X30 (SentShortenedLinks_Flag): Shortened link usage
+  - X31 (UrgentLinkRequests_Flag): Urgent link requests
+  - X32 (AttachmentMentions_Flag): Attachment mentions
+  - X33 (UsedUrgentLanguage_Flag): Urgent language usage
+  - X34 (ImpersonationAttempt_Flag): Impersonation attempts
+  - X39 (VeryShortMessages_Flag): Very short messages
+  - X40 (UsedSpamTemplate_Flag): Spam template usage
+  - X41 (AskedForPersonalInfo_Flag): Personal info requests
+  - X42 (UnsolicitedContact_Flag): Unsolicited contact
+  - X43 (RapidMessaging_Flag): Rapid messaging detection
+  - X45 (VagueJobDescriptions_Flag): Vague job descriptions
 
 - **Security Flags**:
-  - `ImpersonationAttempt_InMsg`: Attempted to impersonate someone
-  - `AsksForFinancialDetails_OffPlatform`: Requested financial information
-  - `AsksForCredentials_OffPlatform`: Requested login credentials
-  - `MentionsOffPlatformPaymentMethod`: Mentioned alternative payment methods
-  - `AsksForPersonalInfo`: Requested personal information
-  - `ContactedUnsolicited`: Contacted users without prior interaction
+  - X20 (RiskLevel_Encoded): Risk level classification
+  - X23 (UserFlags_Count): User flag count
+  - X35 (AskedForFinancialDetails_Flag): Financial details requests
+  - X36 (AskedForCredentials_Flag): Credential requests
+  - X37 (OffPlatformPaymentMentions_Flag): Off-platform payment mentions
+  - X44 (SuspiciousActions_Flag): Suspicious actions
 
-- **Activity Patterns**:
-  - `RapidMessagingDetected`: Sent many messages in short time
-  - `AttemptedSuspiciousAction`: Attempted suspicious actions
-  - `VagueJobDescriptionPosted`: Posted vague job descriptions
-  - `IndiscriminateApplicationsSent`: Applied to many jobs without reading
+- **Account Behavior**:
+  - X24 (UsernameHasNumbers_Flag): Username contains numbers
+  - X25 (UsernameHasSpecialChars_Flag): Username has special characters
+  - X26 (UsedDisposableEmail_Flag): Disposable email usage
+  - X38 (UsedTemporaryPhone_Flag): Temporary phone usage
 
 - **Bot Detection**:
-  - `IsKnownBotOrHeadlessBrowser`: Detected bot-like behavior
-  - `SuspectedRobotUser`: Suspected automated account
-  - `CaptchaDefeatedByBot`: Bypassed security checks
+  - X47 (BotLikeBehavior_Flag): Bot-like behavior
+  - X48 (HeadlessBrowser_Flag): Headless browser detection
+  - X49 (SuspectedRobot_Flag): Robot suspicion
+  - X50 (CaptchaDefeated_Flag): Captcha defeat
 
-- **Other Flags**:
-  - `OtherBehaviorFlag_5`: Other suspicious behavior (5)
-  - `OtherBehaviorFlag_6`: Other suspicious behavior (6)
+### 6.3 Feature Encoding
+- **Country Tier** (X6):
+  - 2: Tier 1 (High Trust)
+  - 3: Tier 2 (Medium Risk)
+  - 4: Tier 3 (High Risk, e.g., Pakistan)
 
-*Disclaimer: These mappings are based on LLM analysis of common spammer behaviors and patterns. The actual field names and meanings in the dataset may differ. This mapping serves as a hypothetical interpretation to aid in understanding potential spammer behaviors.*
+- **Profile Completion** (X17):
+  - 8: Complete
+  - 7: Advanced
+  - 6: Intermediate
+  - 5: Basic
+  - 4: Minimal
+  - 3: Very Basic
+  - 2: Incomplete
+  - 1: Empty
 
-### 6.3 Behavioral Patterns
-- **Account Behavior**:
-  - New accounts (X19) with high activity (X1) are suspicious
-  - Unusual activity patterns (X2) indicate potential spam
-  - Incomplete profiles (X21) often associated with spam
+- **Verified Reviews** (X8):
+  - 4-25: Range of verified reviews
+  - 5-10: Higher spammer probability range
 
-- **Activity Patterns**:
-  - Message frequency (X1) shows distinct patterns
-  - Recent activity (X2) differs between spammers and legitimate users
-  - Verification status (X22) impacts spam probability
+- **Daily Messages** (X16):
+  - 3-18: Normal range of messages per day
 
-### 6.4 Validation Approach
-- **Model Performance**:
-  - Features show strong predictive power
-  - Patterns align with known spammer behavior
-  - Importance scores validate hypothesized meanings
+- **Incomplete Orders** (X18):
+  - 3-13: Range of incomplete orders
 
-- **Future Validation**:
-  - Collaborate with domain experts
-  - Validate hypotheses with actual data
-  - Update interpretations based on feedback
+### 6.4 Key Patterns
+- **Spammer Characteristics**:
+  - High urgent message count (X19)
+  - Personal info requests (X11)
+  - Link presence in messages (X12)
+  - Incomplete orders (X18)
+  - Low profile completion (X17)
+  - Verified reviews in suspicious range (X8: 5-10)
+  - Higher country risk tier (X6: 3-4)
+
+- **Non-Spammer Characteristics**:
+  - Low urgent message count
+  - No personal info requests
+  - No links in messages
+  - Complete orders
+  - High profile completion
+  - Verified reviews outside suspicious range
+  - Lower country risk tier
+
+### 6.5 Feature Importance Analysis
+- **Top Features**:
+  1. Urgent Message Count (X19): Most important feature, indicating that urgent messaging patterns are strong indicators of spam behavior
+  2. Total Messages Sent (X1): Shows overall activity level
+  3. Recent Messages (X2): Indicates current activity patterns
+  4. Verification Level (X7): Important for establishing account legitimacy
+  5. Off-Platform Mentions (X22): Shows attempts to move communication off-platform
+  6. Link Count (X21): Indicates potential malicious content sharing
+
+- **Risk Indicators**:
+  - High urgent message count
+  - Personal info requests
+  - Link presence in messages
+  - Incomplete orders
+  - Low profile completion
+  - Verified reviews in suspicious range (5-10)
+  - Higher country risk tier
+
+This analysis suggests that while individual message behaviors are important, the combination of urgent messaging patterns, verification status, and profile completeness is most significant for spam detection.
 
 ## 7. Implementation
 ### 7.1 Trained Model

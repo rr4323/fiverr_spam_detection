@@ -1,28 +1,63 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier
 from imblearn.over_sampling import SMOTE
+from imblearn.combine import SMOTETomek
 import joblib
 import os
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Tuple
 
-def load_data(file_path):
+def create_composite_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create composite features to enhance spam detection
+    """
+    print("\nCreating composite features...")
+    
+    # Create a copy to avoid modifying the original dataframe
+    df_composite = df.copy()
+    
+    # Account risk score
+    df_composite['X52'] = (
+        (df_composite['X1'] < 86400).astype(int) * 5 +  # New account (< 1 day)
+        (df_composite['X2'] > 100).astype(int) * 3 +    # High message count
+        (df_composite['X19'] == 1).astype(int) * 5 +    # Lowest rating
+        (df_composite['X20'] == 3).astype(int) * 3      # Highest risk level
+    )
+    
+    # Message behavior risk
+    df_composite['X53'] = (
+        (df_composite['X21'] > 10).astype(int) * 2 +    # Many links
+        (df_composite['X22'] > 10).astype(int) * 2 +    # Many off-platform mentions
+        df_composite[['X28', 'X29', 'X30', 'X31', 'X33']].sum(axis=1)  # Suspicious message behaviors
+    )
+    
+    # Verification risk
+    df_composite['X54'] = (
+        (df_composite['X12'] == 0).astype(int) +        # Email not verified
+        (df_composite['X13'] == 0).astype(int) +        # Phone not verified
+        (df_composite['X27'] == 0).astype(int)          # Payment not verified
+    )
+    
+    return df_composite
+
+def load_data(file_path: str) -> pd.DataFrame:
     """
     Load and provide initial analysis of the dataset
     """
     print("Loading data...")
     df = pd.read_csv(file_path)
     
+    # Add composite features
+    df = create_composite_features(df)
+    
     print(f"Dataset shape: {df.shape}")
-    print("\nSample of first few rows:")
-    print(df.head())
     print("\nClass distribution:")
     print(df['label'].value_counts(normalize=True))
     
@@ -30,7 +65,7 @@ def load_data(file_path):
     print(df.isnull().sum())
     return df
 
-def preprocess_data(df):
+def preprocess_data(df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, pd.Series, StandardScaler, pd.Index]:
     """
     Preprocess the data by handling missing values and scaling features
     """
@@ -47,9 +82,9 @@ def preprocess_data(df):
     imputer = SimpleImputer(strategy='median')
     X_imputed = imputer.fit_transform(X)
     
-    # Scale features to have zero mean and unit variance
+    # Scale features using MinMaxScaler for better handling of extreme values
     print("Scaling features...")
-    scaler = StandardScaler()
+    scaler = MinMaxScaler()
     X_scaled = scaler.fit_transform(X_imputed)
     
     # Quality check for NaN values
@@ -58,25 +93,31 @@ def preprocess_data(df):
     
     return X_scaled, y, user_ids, scaler, X.columns
 
-def handle_class_imbalance(X_train, y_train):
+def handle_class_imbalance(X_train: np.ndarray, y_train: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Handle class imbalance using SMOTE
+    Handle class imbalance using SMOTE-Tomek
     """
-    print("\nHandling class imbalance with SMOTE...")
-    smote = SMOTE(random_state=42)
-    X_resampled, y_resampled = smote.fit_resample(X_train, y_train)
+    print("\nHandling class imbalance with SMOTE-Tomek...")
+    smt = SMOTETomek(random_state=42)
+    X_resampled, y_resampled = smt.fit_resample(X_train, y_train)
     return X_resampled, y_resampled
 
-def evaluate_model(model, X_train, X_test, y_train, y_test, feature_names):
+def evaluate_model(model: RandomForestClassifier, 
+                  X_train: np.ndarray, 
+                  X_test: np.ndarray, 
+                  y_train: np.ndarray, 
+                  y_test: np.ndarray, 
+                  feature_names: pd.Index,
+                  threshold: float = 0.3) -> Tuple[Dict[str, float], RandomForestClassifier]:
     """
     Evaluate the model and return metrics
     """
     # Train the model
     model.fit(X_train, y_train)
     
-    # Make predictions
-    y_pred = model.predict(X_test)
+    # Make predictions with custom threshold
     y_proba = model.predict_proba(X_test)[:, 1]
+    y_pred = (y_proba >= threshold).astype(int)
     
     # Calculate metrics
     metrics = {
@@ -84,7 +125,8 @@ def evaluate_model(model, X_train, X_test, y_train, y_test, feature_names):
         'Precision': precision_score(y_test, y_pred),
         'Recall': recall_score(y_test, y_pred),
         'F1 Score': f1_score(y_test, y_pred),
-        'ROC-AUC': roc_auc_score(y_test, y_proba)
+        'ROC-AUC': roc_auc_score(y_test, y_proba),
+        'Decision Threshold': threshold
     }
     
     # Print classification report
@@ -120,7 +162,11 @@ def evaluate_model(model, X_train, X_test, y_train, y_test, feature_names):
     
     return metrics, model
 
-def save_model_artifacts(model, scaler, feature_names, metrics):
+def save_model_artifacts(model: RandomForestClassifier, 
+                        scaler: StandardScaler, 
+                        feature_names: pd.Index, 
+                        metrics: Dict[str, float], 
+                        threshold: float = 0.3) -> None:
     """
     Save model artifacts for production
     """
@@ -134,39 +180,37 @@ def save_model_artifacts(model, scaler, feature_names, metrics):
     # Save scaler
     joblib.dump(scaler, os.path.join(models_dir, 'scaler.pkl'))
     
-    # Save metrics
-    with open(os.path.join(models_dir, 'model_metrics.json'), 'w') as f:
-        json.dump(metrics, f, indent=4)
+    # Save metrics and threshold
+    model_info = {
+        'metrics': metrics,
+        'threshold': threshold,
+        'feature_names': list(feature_names)
+    }
+    with open(os.path.join(models_dir, 'model_info.json'), 'w') as f:
+        json.dump(model_info, f, indent=4)
 
 def create_feature_mapping():
     """Create a mapping of encoded features to their actual names and categories."""
-    return {
+    mapping = {
         'X1': {
             'name': 'AccountAge_Seconds',
             'type': 'numeric',
             'category': 'Account Metrics',
             'description': 'Account age in seconds',
-            'importance': 0.0215
+            'importance': 0.0761
         },
         'X2': {
             'name': 'MessagesSent_Total',
             'type': 'numeric',
             'category': 'Account Metrics',
             'description': 'Total number of messages sent',
-            'importance': 0.0364
+            'importance': 0.0680
         },
         'X3': {
-            'name': 'AccountLevel_Encoded',
+            'name': 'SellerCategory',
             'type': 'categorical',
             'category': 'Account Information',
-            'description': 'Account level encoded',
-            'mapping': {
-                '36': 'Level 2 Seller',
-                '71': 'Level 1 Seller',
-                '51': 'New Seller',
-                '28': 'Top Rated Seller',
-                '13': 'Rising Talent'
-            },
+            'description': 'Seller category encoded',
             'importance': 0.0192
         },
         'X4': {
@@ -174,11 +218,6 @@ def create_feature_mapping():
             'type': 'categorical',
             'category': 'Account Information',
             'description': 'Type of referrer encoded',
-            'mapping': {
-                '1': 'Direct',
-                '2': 'Search',
-                '3': 'Social Media'
-            },
             'importance': 0.0450
         },
         'X5': {
@@ -187,21 +226,21 @@ def create_feature_mapping():
             'category': 'Account Information',
             'description': 'Country tier encoded',
             'mapping': {
-                '9': 'Tier 1 (High Trust)',
-                '11': 'Tier 2',
-                '8': 'Tier 3',
-                '16': 'Tier 4 (Low Trust)'
+                '2': 'Tier 1 (High Trust)',
+                '3': 'Tier 2 (Medium Risk)',
+                '4': 'Tier 3 (High Risk)'
             },
             'importance': 0.0456
         },
         'X6': {
-            'name': 'ProfileCompletionTier_Encoded',
+            'name': 'CountryTier',
             'type': 'categorical',
             'category': 'Account Information',
-            'description': 'Profile completion tier encoded',
+            'description': 'Country risk tier',
             'mapping': {
-                '1': 'Basic',
-                '2': 'Complete'
+                '2': 'Tier 1 (High Trust)',
+                '3': 'Tier 2 (Medium Risk)',
+                '4': 'Tier 3 (High Risk)'
             },
             'importance': 0.0611
         },
@@ -210,19 +249,13 @@ def create_feature_mapping():
             'type': 'categorical',
             'category': 'Account Information',
             'description': 'Level of verification encoded',
-            'mapping': {
-                '21': 'Basic Verification',
-                '7': 'ID Verified',
-                '15': 'Payment Verified',
-                '2': 'Phone Verified'
-            },
             'importance': 0.0649
         },
         'X8': {
-            'name': 'LoginCount_Recent',
+            'name': 'TotalVerifiedReview',
             'type': 'numeric',
             'category': 'Account Metrics',
-            'description': 'Number of recent logins',
+            'description': 'Total number of verified reviews',
             'importance': 0.0555
         },
         'X9': {
@@ -230,72 +263,34 @@ def create_feature_mapping():
             'type': 'categorical',
             'category': 'Account Information',
             'description': 'Country encoded',
-            'mapping': {
-                '1': 'United States',
-                '2': 'United Kingdom',
-                '3': 'Canada',
-                '4': 'Australia',
-                '5': 'Germany',
-                '6': 'France',
-                '7': 'India',
-                '8': 'Pakistan',
-                '9': 'Bangladesh',
-                '10': 'Philippines',
-                '11': 'Nigeria',
-                '12': 'Kenya',
-                '13': 'South Africa',
-                '14': 'Other European',
-                '15': 'Other Asian',
-                '16': 'Other'
-            },
             'importance': 0.0223
         },
         'X10': {
-            'name': 'HasProfilePic',
-            'type': 'categorical',
+            'name': 'ProfilePic_Indicator',
+            'type': 'boolean',
             'category': 'Profile Features',
             'description': 'Whether user has profile picture',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X11': {
-            'name': 'HasDescription',
-            'type': 'categorical',
-            'category': 'Profile Features',
-            'description': 'Whether user has profile description',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
+            'name': 'AskedPersonalInfo',
+            'type': 'boolean',
+            'category': 'Message Behavior',
+            'description': 'Whether user asked for personal information',
             'importance': 0.0
         },
         'X12': {
-            'name': 'EmailVerified',
-            'type': 'categorical',
-            'category': 'Profile Features',
-            'description': 'Whether email is verified',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
+            'name': 'LinkInMessage',
+            'type': 'boolean',
+            'category': 'Message Behavior',
+            'description': 'Whether message contains links',
             'importance': 0.0
         },
         'X13': {
-            'name': 'PhoneVerified',
-            'type': 'categorical',
+            'name': 'PhoneVerified_Flag',
+            'type': 'boolean',
             'category': 'Profile Features',
             'description': 'Whether phone is verified',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X14': {
@@ -306,441 +301,300 @@ def create_feature_mapping():
             'importance': 0.0
         },
         'X15': {
-            'name': 'PortfolioItems_Count',
-            'type': 'numeric',
+            'name': 'EmailVerified',
+            'type': 'boolean',
             'category': 'Profile Features',
-            'description': 'Number of portfolio items',
+            'description': 'Whether email is verified',
             'importance': 0.0
         },
         'X16': {
-            'name': 'GigsActive_Count',
+            'name': 'MessageInDay',
             'type': 'numeric',
             'category': 'Account Metrics',
-            'description': 'Number of active gigs',
+            'description': 'Number of messages sent in a day',
             'importance': 0.0207
         },
         'X17': {
-            'name': 'ReviewsReceived_Count',
+            'name': 'ProfileCompletionScore',
             'type': 'numeric',
-            'category': 'Account Metrics',
-            'description': 'Number of reviews received',
+            'category': 'Profile Features',
+            'description': 'Profile completion score (1-8)',
             'importance': 0.0375
         },
         'X18': {
-            'name': 'OrdersCompleted_Count',
+            'name': 'IncompleteOrder',
             'type': 'numeric',
             'category': 'Account Metrics',
-            'description': 'Number of completed orders',
+            'description': 'Number of incomplete orders',
             'importance': 0.0231
         },
         'X19': {
-            'name': 'AvgRating_Encoded',
-            'type': 'categorical',
-            'category': 'Account Information',
-            'description': 'Average rating encoded',
-            'mapping': {
-                '10': '5.0 Stars',
-                '9': '4.5-4.9 Stars',
-                '8': '4.0-4.4 Stars',
-                '7': '3.5-3.9 Stars',
-                '6': '3.0-3.4 Stars',
-                '5': '2.5-2.9 Stars',
-                '4': '2.0-2.4 Stars',
-                '3': '1.5-1.9 Stars',
-                '2': '1.0-1.4 Stars',
-                '1': '0.5-0.9 Stars'
-            },
-            'importance': 0.1773
+            'name': 'UrgentInMessageCount',
+            'type': 'numeric',
+            'category': 'Message Behavior',
+            'description': 'Count of urgent messages',
+            'importance': 0.2261
         },
         'X20': {
-            'name': 'LoginFromSuspiciousIP',
+            'name': 'Activity_Risk_Encoded',
             'type': 'categorical',
             'category': 'Security Flags',
-            'description': 'Login detected from suspicious IP',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
+            'description': 'Activity risk level encoded',
             'importance': 0.0
         },
         'X21': {
-            'name': 'SentLink_InMsg',
-            'type': 'categorical',
+            'name': 'SentLink_InMsg_Count',
+            'type': 'numeric',
             'category': 'Message Behavior',
-            'description': 'Sent links in messages',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
-            'importance': 0.0288
+            'description': 'Count of links sent in messages',
+            'importance': 0.0592
         },
         'X22': {
-            'name': 'MentionsOffPlatformApp',
-            'type': 'categorical',
+            'name': 'MentionsOffPlatformApp_EncodedCount',
+            'type': 'numeric',
             'category': 'Message Behavior',
-            'description': 'Mentions off-platform applications',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
-            'importance': 0.0835
+            'description': 'Count of off-platform app mentions',
+            'importance': 0.0620
         },
         'X23': {
-            'name': 'FlaggedByOtherUser',
-            'type': 'categorical',
+            'name': 'FlaggedByOtherUser_Count',
+            'type': 'numeric',
             'category': 'Security Flags',
-            'description': 'User was flagged by other users',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
+            'description': 'Count of flags by other users',
             'importance': 0.0309
         },
         'X24': {
-            'name': 'UsernameHasNumbers',
-            'type': 'categorical',
+            'name': 'UsernameHasNumbers_Flag',
+            'type': 'boolean',
             'category': 'Account Behavior',
             'description': 'Username contains numbers',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X25': {
-            'name': 'UsernameHasExcessiveSpecialChars',
-            'type': 'categorical',
+            'name': 'UsernameHasExcessiveSpecialChars_Flag',
+            'type': 'boolean',
             'category': 'Account Behavior',
-            'description': 'Username contains excessive special characters',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
+            'description': 'Username has excessive special characters',
             'importance': 0.0334
         },
         'X26': {
-            'name': 'UsedDisposableEmail',
-            'type': 'categorical',
+            'name': 'UsedDisposableEmail_Flag',
+            'type': 'boolean',
             'category': 'Account Behavior',
             'description': 'Used a disposable email service',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X27': {
             'name': 'PaymentVerified_Flag',
-            'type': 'categorical',
+            'type': 'boolean',
             'category': 'Account Information',
             'description': 'Payment method is verified',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X28': {
-            'name': 'AsksForEmail_InMsg',
-            'type': 'categorical',
+            'name': 'AsksForEmail_InMsg_Flag',
+            'type': 'boolean',
             'category': 'Message Behavior',
             'description': 'Asks for email in messages',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X29': {
-            'name': 'AsksForPayment_OffPlatform',
-            'type': 'categorical',
+            'name': 'AsksForPayment_OffPlatform_Flag',
+            'type': 'boolean',
             'category': 'Message Behavior',
             'description': 'Asks for payment outside platform',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X30': {
-            'name': 'SentShortenedLink_InMsg',
-            'type': 'categorical',
+            'name': 'SentShortenedLink_InMsg_Flag',
+            'type': 'boolean',
             'category': 'Message Behavior',
             'description': 'Sent shortened links in messages',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X31': {
-            'name': 'AsksToOpenLink_Urgent',
-            'type': 'categorical',
+            'name': 'AsksToOpenLink_Urgent_Flag',
+            'type': 'boolean',
             'category': 'Message Behavior',
             'description': 'Urgently asks to open links',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X32': {
-            'name': 'MentionsAttachment_InMsg',
-            'type': 'categorical',
+            'name': 'MentionsAttachment_InMsg_Count',
+            'type': 'numeric',
             'category': 'Message Behavior',
-            'description': 'Mentions attachments in messages',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
+            'description': 'Count of attachment mentions',
             'importance': 0.0
         },
         'X33': {
-            'name': 'UsedUrgentLanguage_InMsg',
-            'type': 'categorical',
+            'name': 'UsedUrgentLanguage_InMsg_Flag',
+            'type': 'boolean',
             'category': 'Message Behavior',
             'description': 'Uses urgent language in messages',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X34': {
-            'name': 'ImpersonationAttempt_InMsg',
-            'type': 'categorical',
+            'name': 'ImpersonationAttempt_InMsg_Flag',
+            'type': 'boolean',
             'category': 'Message Behavior',
             'description': 'Attempts impersonation in messages',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X35': {
-            'name': 'AsksForFinancialDetails_OffPlatform',
-            'type': 'categorical',
+            'name': 'AsksForFinancialDetails_OffPlatform_Flag',
+            'type': 'boolean',
             'category': 'Security Flags',
             'description': 'Requested financial information',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X36': {
-            'name': 'AsksForCredentials_OffPlatform',
-            'type': 'categorical',
+            'name': 'AsksForCredentials_OffPlatform_Flag',
+            'type': 'boolean',
             'category': 'Security Flags',
             'description': 'Requested login credentials',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0350
         },
         'X37': {
-            'name': 'MentionsOffPlatformPaymentMethod',
-            'type': 'categorical',
+            'name': 'MentionsOffPlatformPaymentMethod_Flag',
+            'type': 'boolean',
             'category': 'Security Flags',
             'description': 'Mentioned alternative payment methods',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X38': {
-            'name': 'UsedTemporaryOnlinePhoneNumber',
-            'type': 'categorical',
+            'name': 'UsedTemporaryOnlinePhoneNumber_Flag',
+            'type': 'boolean',
             'category': 'Account Behavior',
             'description': 'Used temporary phone number',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X39': {
-            'name': 'VeryShortInitialMessage',
-            'type': 'categorical',
+            'name': 'VeryShortInitialMessage_Flag',
+            'type': 'boolean',
             'category': 'Message Behavior',
             'description': 'Sent very short initial messages',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0206
         },
         'X40': {
-            'name': 'UsedGenericSpamTemplate',
-            'type': 'categorical',
+            'name': 'UsedGenericSpamTemplate_Flag',
+            'type': 'boolean',
             'category': 'Message Behavior',
             'description': 'Used generic spam message templates',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X41': {
-            'name': 'AsksForPersonalInfo',
-            'type': 'categorical',
+            'name': 'AsksForPersonalInfo_Flag',
+            'type': 'boolean',
             'category': 'Security Flags',
             'description': 'Requested personal information',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X42': {
-            'name': 'ContactedUnsolicited',
-            'type': 'categorical',
+            'name': 'ContactedUnsolicited_Flag',
+            'type': 'boolean',
             'category': 'Message Behavior',
             'description': 'Contacted users without prior interaction',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X43': {
-            'name': 'RapidMessagingDetected',
-            'type': 'categorical',
+            'name': 'RapidMessagingDetected_Flag',
+            'type': 'boolean',
             'category': 'Message Behavior',
             'description': 'Sent many messages in short time',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X44': {
-            'name': 'AttemptedSuspiciousAction',
-            'type': 'categorical',
+            'name': 'AttemptedSuspiciousAction_Flag',
+            'type': 'boolean',
             'category': 'Security Flags',
             'description': 'Attempted suspicious actions',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X45': {
-            'name': 'VagueJobDescriptionPosted',
-            'type': 'categorical',
+            'name': 'VagueJobDescriptionPosted_Flag',
+            'type': 'boolean',
             'category': 'Message Behavior',
             'description': 'Posted vague job descriptions',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X46': {
-            'name': 'IndiscriminateApplicationsSent',
-            'type': 'categorical',
+            'name': 'IndiscriminateApplicationsSent_Flag',
+            'type': 'boolean',
             'category': 'Message Behavior',
             'description': 'Applied to many jobs without reading',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X47': {
-            'name': 'IsKnownBotOrHeuristic',
-            'type': 'categorical',
+            'name': 'IsKnownBotOrHeuristic_Flag',
+            'type': 'boolean',
             'category': 'Bot Detection',
             'description': 'Detected bot-like behavior',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X48': {
-            'name': 'HeadlessBrowser',
-            'type': 'categorical',
+            'name': 'HeadlessBrowser_Flag',
+            'type': 'boolean',
             'category': 'Bot Detection',
             'description': 'Used headless browser',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X49': {
-            'name': 'SuspectedRobotUser',
-            'type': 'categorical',
+            'name': 'SuspectedRobotUser_Flag',
+            'type': 'boolean',
             'category': 'Bot Detection',
             'description': 'Suspected automated account',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0210
         },
         'X50': {
-            'name': 'CaptchaDefeatedByBot',
-            'type': 'categorical',
+            'name': 'CaptchaDefeatedByBot_Flag',
+            'type': 'boolean',
             'category': 'Bot Detection',
             'description': 'Bypassed security checks',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         },
         'X51': {
             'name': 'OtherBehaviorFlag_5',
-            'type': 'categorical',
+            'type': 'boolean',
             'category': 'Other Flags',
             'description': 'Other suspicious behavior (5)',
-            'ui': {
-                'type': 'selectbox',
-                'options': ['No', 'Yes'],
-                'default': 'No'
-            },
             'importance': 0.0
         }
     }
+    
+    # Add composite features to the mapping
+    mapping.update({
+        'X52': {
+            'name': 'AccountRiskScore',
+            'type': 'numeric',
+            'category': 'Composite Risk Score',
+            'description': 'Combined risk score based on account age, message count, rating, and risk level',
+            'importance': 0.0  # Will be updated after training
+        },
+        'X53': {
+            'name': 'MessageBehaviorRiskScore',
+            'type': 'numeric',
+            'category': 'Composite Risk Score',
+            'description': 'Combined risk score based on link count, off-platform mentions, and suspicious message behaviors',
+            'importance': 0.0  # Will be updated after training
+        },
+        'X54': {
+            'name': 'VerificationRiskScore',
+            'type': 'numeric',
+            'category': 'Composite Risk Score',
+            'description': 'Combined risk score based on email, phone, and payment verification status',
+            'importance': 0.0  # Will be updated after training
+        }
+    })
+    
+    return mapping
 
 def main():
     # Load and preprocess data
     df = load_data('../data/fiverr_data.csv')
+    
+    # Add composite features
+    df = create_composite_features(df)
+    
     # Preprocess data
     X_scaled, y, user_ids, scaler, feature_names = preprocess_data(df)
     
@@ -752,44 +606,57 @@ def main():
     # Handle class imbalance
     X_train_resampled, y_train_resampled = handle_class_imbalance(X_train, y_train)
     
-    # Initialize and train the best model
+    # Initialize and train the model with optimized parameters
     print("\nTraining Random Forest model...")
     model = RandomForestClassifier(
-        n_estimators=300,
-        class_weight='balanced',
-        random_state=42
+        n_estimators=500,
+        class_weight={0: 1, 1: 5},  # Increased weight for spam class
+        max_depth=15,
+        min_samples_split=3,
+        min_samples_leaf=2,
+        random_state=42,
+        n_jobs=-1
     )
     
-    # Evaluate model
+    # Evaluate model with lower threshold
     metrics, trained_model = evaluate_model(
-        model, X_train_resampled, X_test, y_train_resampled, y_test, feature_names
+        model, X_train_resampled, X_test, y_train_resampled, y_test, feature_names, threshold=0.3
     )
     
     # Save model artifacts
-    save_model_artifacts(trained_model, scaler, feature_names, metrics)
+    save_model_artifacts(trained_model, scaler, feature_names, metrics, threshold=0.3)
     
     # Print final metrics
     print("\nFinal Model Performance Metrics:")
     for metric, value in metrics.items():
         print(f"{metric}: {value:.4f}")
-    
+
     # Create feature mapping
     feature_mapping = create_feature_mapping()
+    
+    # Update importance scores for composite features
+    feature_importance = pd.DataFrame({
+        'feature': feature_names,
+        'importance': trained_model.feature_importances_
+    })
+    
+    for i, feature in enumerate(feature_names):
+        if feature in feature_mapping:
+            feature_mapping[feature]['importance'] = feature_importance.loc[feature_importance['feature'] == feature, 'importance'].values[0]
     
     # Save feature mapping
     models_dir = '../models'
     os.makedirs(models_dir, exist_ok=True)
     joblib.dump(feature_mapping, os.path.join(models_dir, 'feature_mapping.pkl'))
     
-    print("Feature mapping created and saved successfully!")
+    print("\nFeature mapping created and saved successfully!")
     print("\nFeature mapping structure:")
     for encoded_col, info in feature_mapping.items():
         print(f"\n{encoded_col} -> {info['description']}")
         print(f"Type: {info['type']}")
-        if 'min_value' in info:
-            print(f"Range: {info['min_value']} to {info['max_value']}")
-        if 'categories' in info:
-            print(f"Categories: {info['categories']}")
+        if 'mapping' in info:
+            print(f"Categories: {info['mapping']}")
+        print(f"Importance: {info['importance']}")
 
 if __name__ == "__main__":
     main() 
