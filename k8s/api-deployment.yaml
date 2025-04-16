@@ -1,0 +1,233 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api-sa
+  namespace: spam-detection
+  labels:
+    app: spam-detection-api
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: api-role
+  namespace: spam-detection
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["monitoring.coreos.com"]
+  resources: ["servicemonitors", "podmonitors"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: api-role-binding
+  namespace: spam-detection
+subjects:
+- kind: ServiceAccount
+  name: api-sa
+  namespace: spam-detection
+roleRef:
+  kind: Role
+  name: api-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+  namespace: spam-detection
+data:
+  ENVIRONMENT: "production"
+  MODEL_CACHE_DIR: "/app/models"
+  HUGGINGFACE_HUB_CACHE: "/app/models"
+  OPENTELEMETRY_ENABLED: "true"
+  OTEL_SERVICE_NAME: "spam-detection-api"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://opentelemetry-collector:4317"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: api-secrets
+  namespace: spam-detection
+type: Opaque
+stringData:
+  HUGGINGFACE_TOKEN: "your-huggingface-token"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spam-detection-api
+  namespace: spam-detection
+  labels:
+    app: spam-detection-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: spam-detection-api
+  template:
+    metadata:
+      labels:
+        app: spam-detection-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+        opentelemetry.io/scrape: "true"
+    spec:
+      serviceAccountName: api-sa
+      containers:
+      - name: api
+        image: spam-detection-api:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+        envFrom:
+        - configMapRef:
+            name: api-config
+        - secretRef:
+            name: api-secrets
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: model-cache
+          mountPath: /app/models
+        - name: opentelemetry-config
+          mountPath: /app/opentelemetry-config
+      volumes:
+      - name: model-cache
+        persistentVolumeClaim:
+          claimName: model-pvc
+      - name: opentelemetry-config
+        configMap:
+          name: opentelemetry-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spam-detection-api
+  namespace: spam-detection
+  labels:
+    app: spam-detection-api
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: spam-detection-api
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: spam-detection-api
+  namespace: spam-detection
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - api.spam-detection.example.com
+    secretName: spam-detection-api-tls
+  rules:
+  - host: api.spam-detection.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: spam-detection-api
+            port:
+              name: http
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: spam-detection-api
+  namespace: spam-detection
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: spam-detection-api
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 15s
+    scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+    - spam-detection
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: spam-detection-api
+  namespace: spam-detection
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: spam-detection-api
+  podMetricsEndpoints:
+  - port: http
+    path: /metrics
+    interval: 15s
+    scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+    - spam-detection
+---
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: spam-detection-api
+  namespace: spam-detection
+spec:
+  exporter:
+    endpoint: http://opentelemetry-collector:4317
+  propagators:
+    - tracecontext
+    - baggage
+  sampler:
+    type: parentbased_traceidratio
+    argument: "0.25"
+  python:
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:latest 

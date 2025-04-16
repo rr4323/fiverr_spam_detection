@@ -81,8 +81,11 @@ The project includes a FastAPI-based REST API for making predictions. The API ca
 
 - `GET /`: Basic API information
 - `GET /model/info`: Get model metrics and feature mapping
+- `GET /model/version`: Get current model version and metrics
 - `POST /predict`: Make a single prediction
 - `POST /predict/batch`: Make multiple predictions at once
+- `POST /feedback`: Submit feedback for model improvement
+- `GET /model/feedback/stats`: Get feedback statistics
 
 Example prediction request:
 ```json
@@ -95,5 +98,116 @@ Example prediction request:
 }
 ```
 
-For detailed API documentation, visit `http://localhost:8000/docs` when running the API locally.
+Example prediction response:
+```json
+{
+    "prediction": 1,
+    "probability": 0.85,
+    "is_spammer": true,
+    "risk_factors": [
+        {
+            "feature": "X19",
+            "description": "Urgent message count",
+            "category": "Message Behavior",
+            "value": "7",
+            "reason": "High number of urgent messages"
+        }
+    ],
+    "model_version": 2
+}
+```
+
+### Model Versioning and Updates
+
+The system includes automatic model versioning and updates:
+
+1. **Version Tracking**:
+   - Each model retraining increments the version number
+   - Version information includes:
+     - Version number
+     - Last update timestamp
+     - Current performance metrics
+
+2. **Automatic Updates**:
+   - Model is automatically retrained when:
+     - Enough feedback is collected (configurable threshold)
+     - Minimum time has passed since last retraining
+   - New predictions automatically use the latest model version
+   - No manual intervention needed for updates
+
+3. **Version Information**:
+   - Check current model version:
+     ```bash
+     curl http://localhost:8000/model/version
+     ```
+   - Response includes:
+     ```json
+     {
+         "version": 2,
+         "last_updated": "2024-03-20T12:00:00Z",
+         "metrics": {
+             "accuracy": 0.92,
+             "precision": 0.89,
+             "recall": 0.94
+         }
+     }
+     ```
+
+4. **Feedback Collection**:
+   - Submit feedback after predictions:
+     ```bash
+     curl -X POST http://localhost:8000/feedback \
+          -H "Content-Type: application/json" \
+          -d '{
+              "prediction_id": "pred_123",
+              "is_correct": true,
+              "actual_label": null,
+              "feedback_notes": "Correct prediction"
+          }'
+     ```
+
+5. **Feedback Statistics**:
+   - Monitor feedback collection:
+     ```bash
+     curl http://localhost:8000/model/feedback/stats
+     ```
+   - Response includes:
+     ```json
+     {
+         "total_feedback": 150,
+         "correct_predictions": 135,
+         "accuracy": 0.90,
+         "last_retrain": "2024-03-20T12:00:00Z"
+     }
+     ```
+
+### Development
+
+When adding new features or making changes:
+
+1. Write tests for new functionality
+2. Run the test suite to ensure existing functionality works
+3. Make your changes
+4. Run tests again to verify changes
+5. Update documentation if needed
+
+The test suite helps maintain code quality and catch potential issues early in development.
+
+### Model Retraining Configuration
+
+The system's retraining behavior can be configured through the `OnlineLearningConfig`:
+
+```python
+class OnlineLearningConfig:
+    learning_rate: float = 0.01
+    batch_size: int = 100
+    min_samples: int = 1000
+    retrain_interval: int = 3600  # 1 hour in seconds
+```
+
+Adjust these parameters based on your needs:
+- `min_samples`: Minimum feedback samples needed for retraining
+- `retrain_interval`: Minimum time between retraining attempts
+- `batch_size`: Number of samples processed in each training batch
+- `learning_rate`: Learning rate for the model (if applicable)
 

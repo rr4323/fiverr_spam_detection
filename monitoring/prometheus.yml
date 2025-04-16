@@ -1,0 +1,36 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'spammer-detection-api'
+    static_configs:
+      - targets: ['api:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # Alert manager will be added later
+          # - 'alertmanager:9093'
+
+rule_files:
+  # Alert rules will be added later
+  # - "alert_rules.yml"
+
+# Custom recording rules for model metrics
+rules:
+  - record: model_accuracy_rolling_24h
+    expr: rate(model_prediction_accuracy_total[24h])
+  - record: model_false_positives_rolling_24h
+    expr: rate(model_false_positives_total[24h])
+  - record: model_false_negatives_rolling_24h
+    expr: rate(model_false_negatives_total[24h])
+  - record: model_drift_score_rolling_24h
+    expr: avg_over_time(model_drift_score[24h]) 

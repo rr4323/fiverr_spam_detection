@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    command: uvicorn src.api:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/app
+      - model_data:/app/models
+      - feedback_data:/app/feedback
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - MODEL_PATH=/app/models
+      - FEEDBACK_PATH=/app/feedback
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - mlflow
+      - prometheus
+
+  webapp:
+    build: .
+    command: streamlit run src/streamlit_app.py
+    volumes:
+      - .:/app
+      - model_data:/app/models
+    ports:
+      - "8501:8501"
+    environment:
+      - ENVIRONMENT=development
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+
+  mlflow:
+    image: mlflow:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/mlruns
+      - ./mlflow.db:/mlflow.db
+    environment:
+      - MLFLOW_TRACKING_URI=sqlite:///mlflow.db
+
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./monitoring/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8888:8888"   # Prometheus metrics
+      - "8889:8889"   # Prometheus exporter
+      - "13133:13133" # Health check extension
+      - "55679:55679" # zpages
+    networks:
+      - monitoring
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "14250:14250" # Jaeger gRPC
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - monitoring
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3000:3000"
+    networks:
+      - monitoring
+
+volumes:
+  model_data:
+  feedback_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  monitoring:
+    driver: bridge 

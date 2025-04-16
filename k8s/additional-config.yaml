@@ -1,0 +1,278 @@
+# Horizontal Pod Autoscaler for API
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: spam-detection-api-hpa
+  namespace: spam-detection
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: spam-detection-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+
+# Horizontal Pod Autoscaler for Streamlit
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: spam-detection-ui-hpa
+  namespace: spam-detection
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: spam-detection-ui
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 70
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+
+# Network Policies
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: spam-detection-api-policy
+  namespace: spam-detection
+spec:
+  podSelector:
+    matchLabels:
+      app: spam-detection-api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: spam-detection-ui
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: opentelemetry-collector
+    ports:
+    - protocol: TCP
+      port: 4317
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: spam-detection-ui-policy
+  namespace: spam-detection
+spec:
+  podSelector:
+    matchLabels:
+      app: spam-detection-ui
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8501
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: spam-detection-api
+    ports:
+    - protocol: TCP
+      port: 8000
+
+# Pod Disruption Budgets
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: spam-detection-api-pdb
+  namespace: spam-detection
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: spam-detection-api
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: spam-detection-ui-pdb
+  namespace: spam-detection
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: spam-detection-ui
+
+# Priority Classes
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: spam-detection-high
+value: 1000000
+globalDefault: false
+description: "High priority for spam detection services"
+
+# Resource Quotas
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: spam-detection-quota
+  namespace: spam-detection
+spec:
+  hard:
+    requests.cpu: "4"
+    requests.memory: 8Gi
+    limits.cpu: "8"
+    limits.memory: 16Gi
+    requests.storage: 20Gi
+    persistentvolumeclaims: "5"
+    services.loadbalancers: "2"
+    services.nodeports: "0"
+
+# Security Context for API
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spam-detection-api
+  namespace: spam-detection
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 3000
+        fsGroup: 2000
+      containers:
+      - name: api
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+
+# Security Context for Streamlit
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spam-detection-ui
+  namespace: spam-detection
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 3000
+        fsGroup: 2000
+      containers:
+      - name: ui
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+
+# Pod Anti-Affinity Rules
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spam-detection-api
+  namespace: spam-detection
+spec:
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - spam-detection-api
+            topologyKey: kubernetes.io/hostname
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spam-detection-ui
+  namespace: spam-detection
+spec:
+  template:
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - spam-detection-ui
+              topologyKey: kubernetes.io/hostname 

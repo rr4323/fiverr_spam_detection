@@ -5,6 +5,8 @@ import numpy as np
 import plotly.graph_objects as go
 from typing import Dict, Any, List
 import time
+import uuid
+from datetime import datetime
 
 # Set page config with dark theme for better visibility
 st.set_page_config(
@@ -373,6 +375,92 @@ def create_risk_matrix(risk_factors: List[Dict[str, str]]) -> pd.DataFrame:
     
     return risk_matrix
 
+def create_feedback_section(prediction_result: Dict[str, Any]):
+    """Create feedback collection UI"""
+    st.markdown("### Feedback")
+    st.markdown("Help improve the model by providing feedback on this prediction")
+    
+    # Store prediction ID in session state
+    if 'prediction_id' not in st.session_state:
+        st.session_state.prediction_id = str(uuid.uuid4())
+    
+    # Feedback form
+    with st.form("feedback_form"):
+        is_correct = st.radio(
+            "Was this prediction correct?",
+            ["Yes", "No"],
+            horizontal=True
+        )
+        
+        actual_label = None
+        if is_correct == "No":
+            actual_label = st.radio(
+                "What was the correct classification?",
+                ["Legitimate User", "Spammer"],
+                horizontal=True
+            )
+        
+        feedback_notes = st.text_area(
+            "Additional notes (optional)",
+            help="Provide any additional context about this prediction"
+        )
+        
+        submitted = st.form_submit_button("Submit Feedback")
+        
+        if submitted:
+            try:
+                feedback_data = {
+                    "prediction_id": st.session_state.prediction_id,
+                    "is_correct": is_correct == "Yes",
+                    "actual_label": actual_label == "Spammer" if actual_label else None,
+                    "feedback_notes": feedback_notes
+                }
+                
+                response = requests.post(
+                    f"{API_URL}/feedback",
+                    json=feedback_data
+                )
+                response.raise_for_status()
+                
+                st.success("Thank you for your feedback! It will help improve the model.")
+                
+                # Clear prediction ID for next prediction
+                del st.session_state.prediction_id
+                
+            except Exception as e:
+                st.error(f"Failed to submit feedback: {str(e)}")
+
+def display_feedback_stats():
+    """Display feedback statistics"""
+    try:
+        response = requests.get(f"{API_URL}/model/feedback/stats")
+        response.raise_for_status()
+        stats = response.json()
+        
+        st.markdown("### Model Feedback Statistics")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Total Feedback", stats["total_feedback"])
+        
+        with col2:
+            st.metric(
+                "Accuracy",
+                f"{stats['accuracy']:.1%}",
+                help="Based on user feedback"
+            )
+        
+        with col3:
+            last_retrain = datetime.fromisoformat(stats["last_retrain"])
+            st.metric(
+                "Last Retrain",
+                last_retrain.strftime("%Y-%m-%d %H:%M"),
+                help="Last model retraining time"
+            )
+        
+    except Exception as e:
+        st.error(f"Failed to load feedback statistics: {str(e)}")
+
 def main():
     # Center-aligned title with icon and subtitle
     st.markdown("""
@@ -489,6 +577,12 @@ def main():
                     metrics_df.style.format("{:.4f}"),
                     use_container_width=True
                 )
+            
+            # Add feedback section
+            create_feedback_section(result)
+            
+            # Add feedback stats section
+            display_feedback_stats()
 
 if __name__ == "__main__":
     main() 

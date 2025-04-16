@@ -1,0 +1,198 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: streamlit-sa
+  namespace: spam-detection
+  labels:
+    app: spam-detection-ui
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: streamlit-role
+  namespace: spam-detection
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: streamlit-role-binding
+  namespace: spam-detection
+subjects:
+- kind: ServiceAccount
+  name: streamlit-sa
+  namespace: spam-detection
+roleRef:
+  kind: Role
+  name: streamlit-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: streamlit-config
+  namespace: spam-detection
+data:
+  API_URL: "http://spam-detection-api:8000"
+  STREAMLIT_SERVER_PORT: "8501"
+  STREAMLIT_SERVER_ADDRESS: "0.0.0.0"
+  STREAMLIT_SERVER_HEADLESS: "true"
+  STREAMLIT_SERVER_ENABLE_CORS: "false"
+  STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spam-detection-ui
+  namespace: spam-detection
+  labels:
+    app: spam-detection-ui
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: spam-detection-ui
+  template:
+    metadata:
+      labels:
+        app: spam-detection-ui
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8501"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: streamlit-sa
+      containers:
+      - name: ui
+        image: spam-detection-ui:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8501
+          name: http
+        envFrom:
+        - configMapRef:
+            name: streamlit-config
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: streamlit-cache
+          mountPath: /root/.streamlit
+        - name: model-cache
+          mountPath: /app/models
+      volumes:
+      - name: streamlit-cache
+        emptyDir: {}
+      - name: model-cache
+        persistentVolumeClaim:
+          claimName: model-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spam-detection-ui
+  namespace: spam-detection
+  labels:
+    app: spam-detection-ui
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: spam-detection-ui
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: spam-detection-ui
+  namespace: spam-detection
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - ui.spam-detection.example.com
+    secretName: spam-detection-ui-tls
+  rules:
+  - host: ui.spam-detection.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: spam-detection-ui
+            port:
+              name: http
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: spam-detection-ui
+  namespace: spam-detection
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: spam-detection-ui
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 15s
+    scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+    - spam-detection
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: spam-detection-ui
+  namespace: spam-detection
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: spam-detection-ui
+  podMetricsEndpoints:
+  - port: http
+    path: /metrics
+    interval: 15s
+    scrapeTimeout: 10s
+  namespaceSelector:
+    matchNames:
+    - spam-detection 

@@ -66,3 +66,15 @@ urllib3==2.4.0
 uvicorn==0.34.0
 watchdog==6.0.0
 xgboost==3.0.0
+# OpenTelemetry dependencies
+opentelemetry-api==1.21.0
+opentelemetry-sdk==1.21.0
+opentelemetry-instrumentation-fastapi==0.42b0
+opentelemetry-instrumentation-requests==0.42b0
+opentelemetry-exporter-otlp==1.21.0
+# Testing dependencies
+pytest==8.1.1
+pytest-mock==3.12.0
+requests-mock==1.12.0
+pytest-cov==4.1.0
+httpx==0.27.0
