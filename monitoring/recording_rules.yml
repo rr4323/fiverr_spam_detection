@@ -1,0 +1,12 @@
+groups:
+  - name: model_metrics
+    interval: 1m
+    rules:
+      - record: model_accuracy_rolling_24h
+        expr: rate(model_prediction_accuracy_total[24h])
+      - record: model_false_positives_rolling_24h
+        expr: rate(model_false_positives_total[24h])
+      - record: model_false_negatives_rolling_24h
+        expr: rate(model_false_negatives_total[24h])
+      - record: model_drift_score_rolling_24h
+        expr: avg_over_time(model_drift_score[24h])

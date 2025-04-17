@@ -20,6 +20,28 @@ services:
     networks:
       - monitoring
 
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: streamlit run src/streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./src:/app/src
+      - ./monitoring:/app/monitoring
+    environment:
+      - ENVIRONMENT=development
+      - API_URL=http://app:8000
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+    depends_on:
+      - app
+      - mlflow
+      - otel-collector
+    networks:
+      - monitoring
+
   mlflow:
     image: ghcr.io/mlflow/mlflow:latest
     ports:
@@ -28,6 +50,7 @@ services:
       - mlflow_data:/mlflow
     environment:
       - MLFLOW_TRACKING_URI=sqlite:///mlflow.db
+    command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000"]
     networks:
       - monitoring
 
@@ -58,6 +81,7 @@ services:
     image: prom/prometheus:latest
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/recording_rules.yml:/etc/prometheus/recording_rules.yml
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
@@ -78,6 +102,7 @@ services:
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SECURITY_ADMIN_PASSWORD=admin
     ports:
       - "3000:3000"
     depends_on:

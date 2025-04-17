@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 import numpy as np
 import joblib
@@ -10,23 +10,31 @@ import tempfile
 from pathlib import Path
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
-from src.opentelemetry.config import setup_tracing, instrument_fastapi, get_tracer
-from monitoring.feedback_collector import ModelMonitor, FeedbackEntry
+from .ot.config import setup_tracing, instrument_app, get_tracer
+from .monitoring.feedback_collector import ModelMonitor, FeedbackEntry
 from datetime import datetime
 from sklearn.linear_model import SGDClassifier
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 import threading
-from src.train_model import preprocess_data, handle_class_imbalance, evaluate_model, save_model_artifacts
+from .train_model import preprocess_data, handle_class_imbalance, evaluate_model, save_model_artifacts
 from sklearn.ensemble import RandomForestClassifier
 
-app = FastAPI(title="Spammer Detection API",
-             description="API for detecting spammers using machine learning",
-             version="1.0.0")
+# Get environment variables
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+PORT = int(os.getenv("PORT", "8000"))
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+
+app = FastAPI(
+    title="Spammer Detection API",
+    description="API for detecting spammers using machine learning",
+    version="1.0.0"
+)
 
 # Initialize OpenTelemetry
 tracer = setup_tracing()
-instrument_fastapi(app)
+instrument_app(app)
 
 # Cache directory for model files
 CACHE_DIR = Path.home() / ".cache" / "fiverr_spam_detection"
@@ -397,10 +405,13 @@ async def predict_batch(requests: List[PredictionRequest]):
 
 @app.get("/health")
 async def health_check():
+    """Health check endpoint for Docker and Kubernetes"""
     return {
         "status": "healthy",
         "version": app.version,
-        "environment": os.getenv("ENVIRONMENT", "development")
+        "environment": ENVIRONMENT,
+        "mlflow_uri": MLFLOW_TRACKING_URI,
+        "otel_endpoint": OTEL_EXPORTER_OTLP_ENDPOINT
     }
 
 @app.post("/feedback")
@@ -436,7 +447,7 @@ async def get_feedback_stats():
 @app.get("/model/version")
 async def get_model_version_info():
     """Get current model version information"""
-    return get_model_version()
+    return get_model_version() 
 
 if __name__ == "__main__":
     import uvicorn

@@ -10,10 +10,10 @@ processors:
     send_batch_size: 1024
 
 exporters:
-  logging:
+  debug:
     verbosity: detailed
-  jaeger:
-    endpoint: jaeger:14250
+  otlp:
+    endpoint: jaeger:4317  # Jaeger's OTLP gRPC endpoint
     tls:
       insecure: true
   prometheus:
@@ -27,8 +27,8 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [logging, jaeger]
+      exporters: [debug, otlp]
     metrics:
       receivers: [otlp]
       processors: [batch]
-      exporters: [logging, prometheus] 
+      exporters: [debug, prometheus]

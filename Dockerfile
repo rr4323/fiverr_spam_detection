@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.10.12-slim
 
 WORKDIR /app
 
@@ -21,13 +21,16 @@ COPY monitoring/ monitoring/
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV PORT=8000
+ENV STREAMLIT_PORT=8501
+ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
 
-# Health check
+# Health check for FastAPI
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT}/health || exit 1
 
-# Expose port
+# Expose ports for both applications
 EXPOSE ${PORT}
+EXPOSE ${STREAMLIT_PORT}
 
-# Run the application
+# Default command (can be overridden in docker-compose)
 CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"] 

@@ -3,18 +3,18 @@ version: '3.8'
 services:
   api:
     build: .
-    command: uvicorn src.api:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn src.api:app --host 0.0.0.0 --port 8000
     volumes:
-      - .:/app
       - model_data:/app/models
       - feedback_data:/app/feedback
     ports:
       - "8000:8000"
     environment:
-      - ENVIRONMENT=development
+      - ENVIRONMENT=production
       - MODEL_PATH=/app/models
       - FEEDBACK_PATH=/app/feedback
       - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -23,33 +23,36 @@ services:
     depends_on:
       - mlflow
       - prometheus
+    networks:
+      - monitoring
 
   webapp:
     build: .
-    command: streamlit run src/streamlit_app.py
+    command: streamlit run src/streamlit_app.py --server.port=8501 --server.address=0.0.0.0
     volumes:
-      - .:/app
       - model_data:/app/models
     ports:
       - "8501:8501"
     environment:
-      - ENVIRONMENT=development
+      - ENVIRONMENT=production
       - API_URL=http://api:8000
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
     depends_on:
       - api
+    networks:
+      - monitoring
 
   mlflow:
-    image: mlflow:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.mlflow
+    image: ghcr.io/mlflow/mlflow:latest
     ports:
       - "5000:5000"
     volumes:
-      - ./mlruns:/mlruns
-      - ./mlflow.db:/mlflow.db
+      - mlflow_data:/mlflow
     environment:
       - MLFLOW_TRACKING_URI=sqlite:///mlflow.db
+    networks:
+      - monitoring
 
   otel-collector:
     image: otel/opentelemetry-collector:latest
@@ -80,23 +83,37 @@ services:
     image: prom/prometheus:latest
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
     ports:
       - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
     networks:
       - monitoring
 
   grafana:
     image: grafana/grafana:latest
     volumes:
+      - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
     ports:
       - "3000:3000"
+    depends_on:
+      - prometheus
     networks:
       - monitoring
 
 volumes:
   model_data:
   feedback_data:
+  mlflow_data:
   prometheus_data:
   grafana_data:
 

@@ -7,6 +7,31 @@ from typing import Dict, Any, List
 import time
 import uuid
 from datetime import datetime
+import os
+from opentelemetry import trace
+from ot.frontend_config import setup_frontend_tracing
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
+# Set up OpenTelemetry tracer provider
+trace.set_tracer_provider(TracerProvider())
+
+# Setup OTLP exporter for traces
+otlp_exporter = OTLPSpanExporter(endpoint="http://otel-collector:4317", insecure=True)
+
+# Add the batch processor with the OTLP exporter
+span_processor = BatchSpanProcessor(otlp_exporter)
+trace.get_tracer_provider().add_span_processor(span_processor)
+# Initialize OpenTelemetry
+tracer = setup_frontend_tracing()
+
+# Get environment variables
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+API_URL = os.getenv("API_URL", "http://localhost:8000")
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
 
 # Set page config with dark theme for better visibility
 st.set_page_config(
@@ -17,7 +42,7 @@ st.set_page_config(
     menu_items={
         'Get Help': None,
         'Report a bug': None,
-        'About': "Fiverr Spammer Detection System - Powered by ML"
+        'About': f"Fiverr Spammer Detection System - Powered by ML (Environment: {ENVIRONMENT})"
     }
 )
 
@@ -138,20 +163,21 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# API configuration
-API_URL = "http://localhost:8000"
-
 # Cache model info for 1 hour
 @st.cache_data(ttl=3600)
 def get_model_info():
     """Get model information from API"""
-    try:
-        response = requests.get(f"{API_URL}/model/info")
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        st.error(f"Failed to get model information: {str(e)}")
-        return {"metrics": {}, "feature_mapping": {}, "categories": []}
+    with tracer.start_as_current_span("get_model_info"):
+        try:
+            response = requests.get(f"{API_URL}/model/info")
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.ConnectionError:
+            st.error(f"Failed to connect to API at {API_URL}. Please ensure the API service is running.")
+            return {"metrics": {}, "feature_mapping": {}, "categories": []}
+        except Exception as e:
+            st.error(f"Failed to get model information: {str(e)}")
+            return {"metrics": {}, "feature_mapping": {}, "categories": []}
 
 # Cache gauge chart creation
 @st.cache_data
@@ -345,14 +371,27 @@ def display_risk_factors(risk_factors: List[Dict[str, str]]):
 @st.cache_data(ttl=60)
 def predict_spammer(features: Dict[str, float]) -> Dict[str, Any]:
     """Make a prediction using the API"""
-    try:
-        cleaned_features = {k: float(v if v is not None else 0) for k, v in features.items()}
-        response = requests.post(f"{API_URL}/predict", json={"features": cleaned_features})
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        st.error(f"Prediction failed: {str(e)}")
-        return None
+    with tracer.start_as_current_span("predict_spammer") as span:
+        try:
+            span.set_attribute("feature_count", len(features))
+            cleaned_features = {k: float(v if v is not None else 0) for k, v in features.items()}
+            
+            with tracer.start_as_current_span("api_request"):
+                response = requests.post(f"{API_URL}/predict", json={"features": cleaned_features})
+                response.raise_for_status()
+                result = response.json()
+                
+                # Add prediction result to span
+                span.set_attribute("prediction", result.get("is_spammer", False))
+                span.set_attribute("probability", result.get("probability", 0.0))
+                
+            return result
+        except requests.exceptions.ConnectionError:
+            st.error(f"Failed to connect to API at {API_URL}. Please ensure the API service is running.")
+            return None
+        except Exception as e:
+            st.error(f"Prediction failed: {str(e)}")
+            return None
 
 def create_risk_matrix(risk_factors: List[Dict[str, str]]) -> pd.DataFrame:
     """Create a risk matrix DataFrame"""
@@ -377,91 +416,104 @@ def create_risk_matrix(risk_factors: List[Dict[str, str]]) -> pd.DataFrame:
 
 def create_feedback_section(prediction_result: Dict[str, Any]):
     """Create feedback collection UI"""
-    st.markdown("### Feedback")
-    st.markdown("Help improve the model by providing feedback on this prediction")
-    
-    # Store prediction ID in session state
-    if 'prediction_id' not in st.session_state:
-        st.session_state.prediction_id = str(uuid.uuid4())
-    
-    # Feedback form
-    with st.form("feedback_form"):
-        is_correct = st.radio(
-            "Was this prediction correct?",
-            ["Yes", "No"],
-            horizontal=True
-        )
+    with tracer.start_as_current_span("feedback_section"):
+        st.markdown("### Feedback")
+        st.markdown("Help improve the model by providing feedback on this prediction")
         
-        actual_label = None
-        if is_correct == "No":
-            actual_label = st.radio(
-                "What was the correct classification?",
-                ["Legitimate User", "Spammer"],
+        # Store prediction ID in session state
+        if 'prediction_id' not in st.session_state:
+            st.session_state.prediction_id = str(uuid.uuid4())
+        
+        # Feedback form
+        with st.form("feedback_form"):
+            is_correct = st.radio(
+                "Was this prediction correct?",
+                ["Yes", "No"],
                 horizontal=True
             )
-        
-        feedback_notes = st.text_area(
-            "Additional notes (optional)",
-            help="Provide any additional context about this prediction"
-        )
-        
-        submitted = st.form_submit_button("Submit Feedback")
-        
-        if submitted:
-            try:
-                feedback_data = {
-                    "prediction_id": st.session_state.prediction_id,
-                    "is_correct": is_correct == "Yes",
-                    "actual_label": actual_label == "Spammer" if actual_label else None,
-                    "feedback_notes": feedback_notes
-                }
-                
-                response = requests.post(
-                    f"{API_URL}/feedback",
-                    json=feedback_data
+            
+            actual_label = None
+            if is_correct == "No":
+                actual_label = st.radio(
+                    "What was the correct classification?",
+                    ["Legitimate User", "Spammer"],
+                    horizontal=True
                 )
-                response.raise_for_status()
-                
-                st.success("Thank you for your feedback! It will help improve the model.")
-                
-                # Clear prediction ID for next prediction
-                del st.session_state.prediction_id
-                
-            except Exception as e:
-                st.error(f"Failed to submit feedback: {str(e)}")
+            
+            feedback_notes = st.text_area(
+                "Additional notes (optional)",
+                help="Provide any additional context about this prediction"
+            )
+            
+            submitted = st.form_submit_button("Submit Feedback")
+            
+            if submitted:
+                with tracer.start_as_current_span("submit_feedback"):
+                    try:
+                        feedback_data = {
+                            "prediction_id": st.session_state.prediction_id,
+                            "is_correct": is_correct == "Yes",
+                            "actual_label": actual_label == "Spammer" if actual_label else None,
+                            "feedback_notes": feedback_notes
+                        }
+                        
+                        with tracer.start_as_current_span("api_feedback_request"):
+                            response = requests.post(
+                                f"{API_URL}/feedback",
+                                json=feedback_data
+                            )
+                            response.raise_for_status()
+                            
+                        st.success("Thank you for your feedback! It will help improve the model.")
+                        
+                        # Clear prediction ID for next prediction
+                        del st.session_state.prediction_id
+                        
+                    except Exception as e:
+                        st.error(f"Failed to submit feedback: {str(e)}")
 
 def display_feedback_stats():
     """Display feedback statistics"""
-    try:
-        response = requests.get(f"{API_URL}/model/feedback/stats")
-        response.raise_for_status()
-        stats = response.json()
-        
-        st.markdown("### Model Feedback Statistics")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("Total Feedback", stats["total_feedback"])
-        
-        with col2:
-            st.metric(
-                "Accuracy",
-                f"{stats['accuracy']:.1%}",
-                help="Based on user feedback"
-            )
-        
-        with col3:
-            last_retrain = datetime.fromisoformat(stats["last_retrain"])
-            st.metric(
-                "Last Retrain",
-                last_retrain.strftime("%Y-%m-%d %H:%M"),
-                help="Last model retraining time"
-            )
-        
-    except Exception as e:
-        st.error(f"Failed to load feedback statistics: {str(e)}")
+    with tracer.start_as_current_span("feedback_stats"):
+        try:
+            with tracer.start_as_current_span("api_stats_request"):
+                response = requests.get(f"{API_URL}/model/feedback/stats")
+                response.raise_for_status()
+                stats = response.json()
+            
+            st.markdown("### Model Feedback Statistics")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Total Feedback", stats["total_feedback"])
+            
+            with col2:
+                st.metric(
+                    "Accuracy",
+                    f"{stats['accuracy']:.1%}",
+                    help="Based on user feedback"
+                )
+            
+            with col3:
+                last_retrain = datetime.fromisoformat(stats["last_retrain"])
+                st.metric(
+                    "Last Retrain",
+                    last_retrain.strftime("%Y-%m-%d %H:%M"),
+                    help="Last model retraining time"
+                )
+            
+        except Exception as e:
+            st.error(f"Failed to load feedback statistics: {str(e)}")
 
 def main():
+    # Display environment information in sidebar
+    with st.sidebar:
+        st.markdown("### Environment Info")
+        st.markdown(f"**Environment:** {ENVIRONMENT}")
+        st.markdown(f"**API URL:** {API_URL}")
+        st.markdown(f"**MLflow URI:** {MLFLOW_TRACKING_URI}")
+        st.markdown(f"**OTEL Endpoint:** {OTEL_EXPORTER_OTLP_ENDPOINT}")
+    
     # Center-aligned title with icon and subtitle
     st.markdown("""
         <h1 style='text-align: center; color: #4a9eff; margin-bottom: 10px; font-size: 2.5em;'>
@@ -479,6 +531,7 @@ def main():
     feature_mapping = model_info.get("feature_mapping", {})
     model_metrics = model_info.get("metrics", {})
     categories = model_info.get("categories", [])
+    print(feature_mapping)
     
     # Create two equal columns for form and predictions
     form_col, pred_col = st.columns(2)
